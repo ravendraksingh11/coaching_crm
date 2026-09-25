@@ -2,16 +2,18 @@ const jwt = require("jsonwebtoken");
 
 function auth(req, res, next) {
   try {
-    const header = req.headers.authorization;
+    const authHeader = req.headers.authorization;
 
-    if (!header || !header.startsWith("Bearer ")) {
+    if (!authHeader) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required",
+        message: "Authorization token is required",
       });
     }
 
-    const token = header.substring(7);
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.substring(7)
+      : authHeader;
 
     const decoded = jwt.verify(
       token,
@@ -22,6 +24,8 @@ function auth(req, res, next) {
 
     next();
   } catch (error) {
+    console.error(error);
+
     return res.status(401).json({
       success: false,
       message: "Invalid or expired token",
@@ -29,4 +33,30 @@ function auth(req, res, next) {
   }
 }
 
-module.exports = auth;
+function superAdminOnly(req, res, next) {
+  if (req.user?.role !== "SUPER_ADMIN") {
+    return res.status(403).json({
+      success: false,
+      message: "Super admin access required",
+    });
+  }
+
+  next();
+}
+
+function instituteAdminOnly(req, res, next) {
+  if (req.user?.role !== "INSTITUTE_ADMIN") {
+    return res.status(403).json({
+      success: false,
+      message: "Institute admin access required",
+    });
+  }
+
+  next();
+}
+
+module.exports = {
+  auth,
+  superAdminOnly,
+  instituteAdminOnly,
+};

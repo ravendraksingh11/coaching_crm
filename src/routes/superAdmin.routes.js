@@ -1,6 +1,6 @@
 const express = require("express");
 
-const auth = require("../middleware/auth");
+const { auth } = require("../middleware/auth");
 const allowRoles = require("../middleware/roles");
 
 const {
@@ -28,7 +28,7 @@ router.get(
 router.get(
   "/plans",
   auth,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", 'INSTITUTE_ADMIN'),
   getPlans
 );
 

@@ -82,7 +82,7 @@ async function createBatch(req, res) {
       data: result.rows[0],
     });
   } catch (error) {
-    console.error(error);
+    console.error("createBatch error:", error);
 
     return res.status(500).json({
       success: false,
@@ -91,6 +91,77 @@ async function createBatch(req, res) {
   }
 }
 
+
+// ========================================
+// GET ALL BATCHES
+// ========================================
+async function getBatches(req, res) {
+  console.log("get batches")
+  try {
+    const instituteId = req.user.instituteId;
+
+    if (!instituteId) {
+      return res.status(400).json({
+        success: false,
+        message: "Institute not found",
+      });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        b.id,
+        b.name,
+        b.start_date,
+        b.end_date,
+        b.start_time,
+        b.end_time,
+        b.room_number,
+        b.course_id,
+
+        c.name AS course_name,
+
+        COUNT(e.id)::int AS student_count
+
+      FROM batches b
+
+      LEFT JOIN courses c
+        ON c.id = b.course_id
+        AND c.institute_id = b.institute_id
+
+      LEFT JOIN enrollments e
+        ON e.batch_id = b.id
+        AND e.institute_id = b.institute_id
+        AND e.status = 'ACTIVE'
+
+      WHERE b.institute_id = $1
+
+      GROUP BY
+        b.id,
+        c.id,
+        c.name
+
+      ORDER BY b.created_at DESC
+      `,
+      [instituteId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    console.error("getBatches error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch batches",
+    });
+  }
+}
+
+
 module.exports = {
   createBatch,
+  getBatches,
 };

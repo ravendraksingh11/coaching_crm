@@ -66,6 +66,16 @@ const teacherRoutes =
 const courseRoutes =
   require("./routes/course.routes");
 
+const subscriptionsRoutes =
+  require("./routes/subscriptions.routes");
+
+const plansRoutes = require("./routes/plans.routes");
+
+app.use("/api/plans", plansRoutes);
+app.use(
+  "/api/subscriptions",
+  subscriptionsRoutes
+);
 
 app.use(
   "/api/institute/courses",
@@ -88,12 +98,12 @@ app.use(
 );
 
 app.use(
-  "/api/institutes/batches",
+  "/api/institute/batches",
   batchRoutes
 );
 
 app.use(
-  "/api/institutes/students",
+  "/api/institute/students",
   studentRoutes
 );
 

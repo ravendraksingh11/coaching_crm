@@ -534,3 +534,69 @@ CREATE TABLE notifications (
     created_at TIMESTAMP
         DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS plans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+
+    price NUMERIC(10,2) NOT NULL DEFAULT 0,
+    duration_months INTEGER NOT NULL DEFAULT 1,
+
+    max_students INTEGER,
+    max_teachers INTEGER,
+    max_batches INTEGER,
+
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE', 'INACTIVE')),
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS institute_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    institute_id UUID NOT NULL
+        REFERENCES institutes(id)
+        ON DELETE CASCADE,
+
+    plan_id UUID NOT NULL
+        REFERENCES plans(id),
+
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+        CHECK (
+            status IN (
+                'PENDING',
+                'ACTIVE',
+                'EXPIRED',
+                'CANCELLED'
+            )
+        ),
+
+    payment_status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+        CHECK (
+            payment_status IN (
+                'PENDING',
+                'PAID',
+                'FAILED',
+                'REFUNDED'
+            )
+        ),
+
+    amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+
+    activated_by VARCHAR(20)
+        CHECK (
+            activated_by IN (
+                'SUPER_ADMIN',
+                'INSTITUTE'
+            )
+        ),
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
