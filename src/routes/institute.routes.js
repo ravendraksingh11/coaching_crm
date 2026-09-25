@@ -11,12 +11,14 @@ const {
 const {
   createCourse,
   getCourses,
+  updateCourse,
   deleteCourse,
 } = require("../controllers/instituteCourse.controller");
 
 const {
   createBatch,
   getBatches,
+  updateBatch,
   deleteBatch,
 } = require("../controllers/instituteBatch.controller");
 
@@ -60,6 +62,7 @@ router.post(
   ...instituteAdmin,
   createCourse
 );
+router.put("/courses/:id", ...instituteAdmin, updateCourse);
 
 router.delete(
   "/courses/:id",
@@ -83,6 +86,7 @@ router.post(
   ...instituteAdmin,
   createBatch
 );
+router.put("/batches/:id", ...instituteAdmin, updateBatch);
 
 router.delete(
   "/batches/:id",

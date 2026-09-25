@@ -1,0 +1,12 @@
+const express=require("express");
+const {auth}=require("../middleware/auth");
+const allowRoles=require("../middleware/roles");
+const c=require("../controllers/test.controller");
+const router=express.Router();
+router.post("/",auth,allowRoles("INSTITUTE_ADMIN"),c.createTest);
+router.get("/toppers/latest",auth,allowRoles("INSTITUTE_ADMIN"),c.latestToppers);
+router.patch("/:id/deactivate",auth,allowRoles("INSTITUTE_ADMIN"),c.deactivateTest);
+router.get("/my",auth,allowRoles("STUDENT"),c.getStudentTests);
+router.get("/:id",auth,allowRoles("STUDENT"),c.getTestForStudent);
+router.post("/:id/submit",auth,allowRoles("STUDENT"),c.submitTest);
+module.exports=router;

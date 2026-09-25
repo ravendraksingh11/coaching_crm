@@ -286,8 +286,31 @@ async function getStudents(req, res) {
     }
 }
 
+async function updateStudent(req, res) {
+    try {
+        const { name, phone, admissionNumber, fatherName, motherName, dateOfBirth, address, city, state } = req.body;
+        const result = await pool.query(
+            `UPDATE students s SET admission_number=COALESCE($1,s.admission_number), father_name=COALESCE($2,s.father_name), mother_name=COALESCE($3,s.mother_name), date_of_birth=COALESCE($4,s.date_of_birth), address=COALESCE($5,s.address), city=COALESCE($6,s.city), state=COALESCE($7,s.state), updated_at=CURRENT_TIMESTAMP
+             FROM users u WHERE s.id=$8 AND s.institute_id=$9 AND u.id=s.user_id
+             RETURNING s.*, u.name, u.email, u.phone`,
+            [admissionNumber, fatherName, motherName, dateOfBirth, address, city, state, req.params.id, req.user.instituteId]
+        );
+        if (!result.rowCount) return res.status(404).json({ success:false, message:"Student not found" });
+        if (name || phone) await pool.query("UPDATE users SET name=COALESCE($1,name), phone=COALESCE($2,phone), updated_at=CURRENT_TIMESTAMP WHERE id=$3", [name, phone, result.rows[0].user_id]);
+        return res.json({ success:true, data:result.rows[0] });
+    } catch (error) { console.error(error); return res.status(500).json({success:false,message:"Failed to update student"}); }
+}
+
+async function deleteStudent(req, res) {
+    const client = await pool.connect();
+    try { await client.query("BEGIN"); const r=await client.query("SELECT user_id FROM students WHERE id=$1 AND institute_id=$2",[req.params.id,req.user.instituteId]); if(!r.rowCount){await client.query("ROLLBACK");return res.status(404).json({success:false,message:"Student not found"});} await client.query("DELETE FROM users WHERE id=$1",[r.rows[0].user_id]); await client.query("COMMIT"); return res.json({success:true,message:"Student deleted"}); }
+    catch(error){await client.query("ROLLBACK");console.error(error);return res.status(500).json({success:false,message:"Failed to delete student"});} finally {client.release();}
+}
+
 
 module.exports = {
     createStudent,
     getStudents,
+    updateStudent,
+    deleteStudent,
 };

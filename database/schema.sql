@@ -423,11 +423,41 @@ CREATE TABLE tests (
 
     test_date DATE,
 
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+        CHECK (status IN ('DRAFT', 'ACTIVE', 'INACTIVE')),
+
     created_by UUID
         REFERENCES users(id),
 
     created_at TIMESTAMP
         DEFAULT CURRENT_TIMESTAMP
+);
+
+-- A test can be assigned to a batch, an individual student, or both.
+CREATE TABLE test_assignments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    test_id UUID NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+    institute_id UUID NOT NULL REFERENCES institutes(id) ON DELETE CASCADE,
+    batch_id UUID REFERENCES batches(id) ON DELETE CASCADE,
+    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+    due_date TIMESTAMP,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE', 'INACTIVE')),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (batch_id IS NOT NULL OR student_id IS NOT NULL),
+    UNIQUE(test_id, batch_id, student_id)
+);
+
+CREATE INDEX idx_test_assignments_student ON test_assignments(student_id);
+CREATE INDEX idx_test_assignments_batch ON test_assignments(batch_id);
+
+CREATE TABLE test_submissions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    test_id UUID NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+    submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(test_id, student_id)
 );
 
 CREATE TABLE questions (
@@ -530,6 +560,10 @@ CREATE TABLE notifications (
 
     created_by UUID
         REFERENCES users(id),
+
+    recipient_user_id UUID
+        REFERENCES users(id)
+        ON DELETE CASCADE,
 
     created_at TIMESTAMP
         DEFAULT CURRENT_TIMESTAMP

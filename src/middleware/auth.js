@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
+const pool = require("../../database/connection");
 
-function auth(req, res, next) {
+async function auth(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
 
@@ -20,7 +21,17 @@ function auth(req, res, next) {
       process.env.JWT_SECRET
     );
 
-    req.user = decoded;
+    const userResult = await pool.query(
+      `SELECT u.id,u.role,u.status,u.institute_id,i.status AS institute_status
+       FROM users u LEFT JOIN institutes i ON i.id=u.institute_id WHERE u.id=$1`,
+      [decoded.userId]
+    );
+    const user = userResult.rows[0];
+    if (!user || user.status !== "ACTIVE") return res.status(403).json({ success: false, message: "User account is not active" });
+    if (user.institute_id && !["TRIAL", "ACTIVE"].includes(user.institute_status)) {
+      return res.status(403).json({ success: false, message: "Institute access is blocked or expired" });
+    }
+    req.user = { userId: user.id, role: user.role, instituteId: user.institute_id };
 
     next();
   } catch (error) {

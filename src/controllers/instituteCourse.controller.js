@@ -136,9 +136,23 @@ async function deleteCourse(req, res) {
     }
 }
 
+async function updateCourse(req, res) {
+    try {
+        const { name, description } = req.body;
+        const result = await pool.query(
+            `UPDATE courses SET name = COALESCE($1, name), description = COALESCE($2, description),
+             updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND institute_id = $4 RETURNING *`,
+            [name, description, req.params.id, req.user.instituteId]
+        );
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Course not found" });
+        return res.json({ success: true, data: result.rows[0] });
+    } catch (error) { console.error(error); return res.status(500).json({ success: false, message: "Failed to update course" }); }
+}
+
 
 module.exports = {
     createCourse,
     getCourses,
+    updateCourse,
     deleteCourse,
 };
