@@ -23,7 +23,7 @@ app.use(express.json());
 app.get("/api/health", (req, res) => {
   res.json({
     success: true,
-    message: "Coaching SaaS API is running",
+    message: "ClassOrbitCRM API is running",
   });
 });
 
@@ -144,6 +144,6 @@ const PORT = process.env.PORT || 5010;
 
 app.listen(PORT, () => {
   console.log(
-    `Coaching SaaS API running on http://localhost:${PORT}`
+    `ClassOrbitCRM API running on http://localhost:${PORT}`
   );
 });

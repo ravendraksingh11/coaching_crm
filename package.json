@@ -1,7 +1,7 @@
 {
 "name": "coaching-saas-backend",
 "version": "1.0.0",
-"description": "Backend API for Coaching SaaS",
+"description": "Backend API for ClassOrbitCRM",
 "main": "server.js",
 "scripts": {
   "start": "node src/server.js",

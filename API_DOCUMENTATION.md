@@ -1,4 +1,4 @@
-# Coaching SaaS API
+# ClassOrbitCRM API
 
 Base URL: `/api`. Send `Authorization: Bearer <token>` to every endpoint except health and login. All requests and responses use JSON. Login at `POST /auth/login` with `email` and `password`.
 

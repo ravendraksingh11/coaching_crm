@@ -4,16 +4,12 @@ const pool = require("../../database/connection");
 
 async function login(req, res) {
   try {
-    const {
-      email,
-      password,
-    } = req.body;
+    const { email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message:
-          "Email and password are required",
+        message: "Email and password are required",
       });
     }
 
@@ -30,7 +26,7 @@ async function login(req, res) {
       FROM users
       WHERE email = $1
       `,
-      [email]
+      [email],
     );
 
     if (result.rows.length === 0) {
@@ -49,11 +45,7 @@ async function login(req, res) {
       });
     }
 
-    const passwordValid =
-      await bcrypt.compare(
-        password,
-        user.password_hash
-      );
+    const passwordValid = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordValid) {
       return res.status(401).json({
@@ -71,7 +63,7 @@ async function login(req, res) {
       process.env.JWT_SECRET,
       {
         expiresIn: "7d",
-      }
+      },
     );
 
     return res.json({
