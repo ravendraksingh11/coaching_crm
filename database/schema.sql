@@ -421,6 +421,9 @@ CREATE TABLE tests (
 
     duration_minutes INTEGER,
 
+    screen_recording BOOLEAN NOT NULL DEFAULT FALSE,
+    auto_submit_on_leave BOOLEAN NOT NULL DEFAULT FALSE,
+
     test_date DATE,
 
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
@@ -457,6 +460,15 @@ CREATE TABLE test_submissions (
     student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     answers JSONB NOT NULL DEFAULT '{}'::jsonb,
     submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(test_id, student_id)
+);
+
+CREATE TABLE test_attempts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    test_id UUID NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    submitted_at TIMESTAMP,
     UNIQUE(test_id, student_id)
 );
 
