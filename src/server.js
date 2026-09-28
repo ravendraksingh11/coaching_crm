@@ -72,10 +72,12 @@ const subscriptionsRoutes =
 const plansRoutes = require("./routes/plans.routes");
 const testRoutes = require("./routes/test.routes");
 const parentRoutes = require("./routes/parent.routes");
+const attendanceRoutes = require("./routes/attendance.routes");
 
 app.use("/api/plans", plansRoutes);
 app.use("/api/tests", testRoutes);
 app.use("/api/parent", parentRoutes);
+app.use("/api/attendance", attendanceRoutes);
 app.use(
   "/api/subscriptions",
   subscriptionsRoutes

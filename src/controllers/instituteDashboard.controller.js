@@ -67,19 +67,14 @@ async function getInstituteDashboard(req, res) {
 
             pool.query(`
         SELECT
-          COUNT(*) FILTER (
-            WHERE status = 'PRESENT'
-          )::int AS present,
-
-          COUNT(*) FILTER (
-            WHERE status = 'ABSENT'
-          )::int AS absent,
-
-          COUNT(*)::int AS total
-
-        FROM attendance
-        WHERE institute_id = $1
-        AND date = CURRENT_DATE
+          COUNT(*) FILTER (WHERE r.status = 'PRESENT')::int AS present,
+          COUNT(*) FILTER (WHERE r.status = 'ABSENT')::int AS absent,
+          COUNT(r.id)::int AS total
+        FROM attendance_sessions s
+        LEFT JOIN attendance_records r ON r.attendance_session_id=s.id
+        WHERE s.institute_id = $1
+        AND s.session_date = CURRENT_DATE
+        AND s.status = 'COMPLETED'
       `, [instituteId]),
 
             pool.query(`

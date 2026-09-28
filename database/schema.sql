@@ -402,6 +402,52 @@ CREATE TABLE attendance (
 CREATE INDEX idx_attendance_institute
 ON attendance(institute_id);
 
+CREATE TABLE attendance_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    institute_id UUID NOT NULL REFERENCES institutes(id) ON DELETE CASCADE,
+    batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+    teacher_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    session_date DATE NOT NULL,
+    start_time TIME,
+    end_time TIME,
+    status VARCHAR(20) NOT NULL DEFAULT 'OPEN'
+        CHECK (status IN ('OPEN', 'COMPLETED', 'CANCELLED')),
+    remarks TEXT,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX uq_attendance_sessions_batch_date_start
+ON attendance_sessions(batch_id, session_date, (COALESCE(start_time, TIME '00:00')));
+CREATE INDEX idx_attendance_sessions_institute_date
+ON attendance_sessions(institute_id, session_date DESC);
+
+CREATE TABLE attendance_records (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    attendance_session_id UUID NOT NULL REFERENCES attendance_sessions(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'ABSENT'
+        CHECK (status IN ('PRESENT', 'ABSENT', 'LATE', 'LEAVE')),
+    marked_at TIMESTAMP,
+    marked_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    remarks TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(attendance_session_id, student_id)
+);
+CREATE INDEX idx_attendance_records_student ON attendance_records(student_id);
+
+CREATE TABLE attendance_audit_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    attendance_record_id UUID NOT NULL REFERENCES attendance_records(id) ON DELETE CASCADE,
+    old_status VARCHAR(20) NOT NULL,
+    new_status VARCHAR(20) NOT NULL,
+    changed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    reason TEXT,
+    changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE tests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
