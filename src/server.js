@@ -56,6 +56,9 @@ const superAdminRoutes =
 const instituteDashboardRoutes =
   require("./routes/instituteDashboard.routes");
 
+const instituteSettingsRoutes =
+  require("./routes/instituteSettings.routes");
+
 const instituteStudentRoutes =
   require("./routes/instituteStudent.routes");
 
@@ -131,6 +134,11 @@ app.use(
 app.use(
   "/api/institute/dashboard",
   instituteDashboardRoutes
+);
+
+app.use(
+  "/api/institute/settings",
+  instituteSettingsRoutes
 );
 
 app.use(

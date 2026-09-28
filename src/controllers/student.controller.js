@@ -327,7 +327,17 @@ async function createStudent(req, res) {
   } catch (error) {
     await client.query("ROLLBACK");
 
-    console.error(error);
+    console.error("Create student error:", error);
+
+    if (error.code === "23505") {
+      const isAdmissionConflict = error.constraint?.includes("admission_number");
+      return res.status(409).json({
+        success: false,
+        message: isAdmissionConflict
+          ? "Admission number already exists in this institute"
+          : "Email already exists",
+      });
+    }
 
     return res.status(500).json({
       success: false,

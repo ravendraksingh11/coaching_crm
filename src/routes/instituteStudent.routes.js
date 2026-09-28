@@ -5,11 +5,14 @@ const allowRoles = require("../middleware/roles");
 
 const {
     getStudents,
+    getNextAdmissionNumber,
     updateStudent,
     deleteStudent,
 } = require("../controllers/instituteStudent.controller");
 
 const router = express.Router();
+
+router.get("/admission-number/next", auth, allowRoles("INSTITUTE_ADMIN"), getNextAdmissionNumber);
 
 router.get(
     "/",

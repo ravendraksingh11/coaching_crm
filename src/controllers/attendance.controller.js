@@ -155,12 +155,22 @@ async function saveRecords(req, res) {
       return res.status(400).json({ success: false, message: "One or more students are not on this session roster" });
     }
     for (const record of records) {
-      await client.query(
-        `INSERT INTO attendance_audit_logs (attendance_record_id,old_status,new_status,changed_by,reason)
-         SELECT id,status,$3,$4,$5 FROM attendance_records
-         WHERE attendance_session_id=$1 AND student_id=$2 AND status<>$3`,
-        [req.params.sessionId, record.studentId, record.status, req.user.userId, record.remarks || null],
-      );
+      // Audit history is secondary to recording attendance. A savepoint allows
+      // the attendance update to proceed if the audit insert fails.
+      await client.query("SAVEPOINT attendance_audit");
+      try {
+        await client.query(
+          `INSERT INTO attendance_audit_logs (attendance_record_id,old_status,new_status,changed_by,reason)
+           SELECT id,status,$3,$4,$5 FROM attendance_records
+           WHERE attendance_session_id=$1 AND student_id=$2 AND status<>$3`,
+          [req.params.sessionId, record.studentId, record.status, req.user.userId, record.remarks || null],
+        );
+      } catch (auditError) {
+        await client.query("ROLLBACK TO SAVEPOINT attendance_audit");
+        console.error("Could not write attendance audit log:", auditError);
+      } finally {
+        await client.query("RELEASE SAVEPOINT attendance_audit");
+      }
       await client.query(
         `UPDATE attendance_records SET status=$3,marked_at=CURRENT_TIMESTAMP,marked_by=$4,remarks=$5,updated_at=CURRENT_TIMESTAMP
          WHERE attendance_session_id=$1 AND student_id=$2`,
@@ -171,7 +181,7 @@ async function saveRecords(req, res) {
     return res.json({ success: true, message: "Attendance saved" });
   } catch (e) {
     await client.query("ROLLBACK");
-    console.error(e);
+    console.error("Save attendance records failed:", e);
     return res.status(500).json({ success: false, message: "Could not save attendance" });
   } finally {
     client.release();
@@ -224,12 +234,12 @@ async function getBatchReport(req, res) {
   try {
     const result = await pool.query(
       `SELECT s.id AS student_id,u.name,s.admission_number,
-        COUNT(r.id) FILTER (WHERE a.status='COMPLETED' AND r.status<>'LEAVE')::int AS total_classes,
-        COUNT(r.id) FILTER (WHERE a.status='COMPLETED' AND r.status='PRESENT')::int AS present,
-        COUNT(r.id) FILTER (WHERE a.status='COMPLETED' AND r.status='ABSENT')::int AS absent,
-        COUNT(r.id) FILTER (WHERE a.status='COMPLETED' AND r.status='LATE')::int AS late,
-        COUNT(r.id) FILTER (WHERE a.status='COMPLETED' AND r.status='LEAVE')::int AS leave,
-        COALESCE(ROUND(100.0*COUNT(r.id) FILTER (WHERE a.status='COMPLETED' AND r.status IN ('PRESENT','LATE')) / NULLIF(COUNT(r.id) FILTER (WHERE a.status='COMPLETED' AND r.status<>'LEAVE'),0),2),0) AS percentage
+        COUNT(r.id) FILTER (WHERE a.status IN ('OPEN','COMPLETED') AND r.marked_at IS NOT NULL AND r.status<>'LEAVE')::int AS total_classes,
+        COUNT(r.id) FILTER (WHERE a.status IN ('OPEN','COMPLETED') AND r.marked_at IS NOT NULL AND r.status='PRESENT')::int AS present,
+        COUNT(r.id) FILTER (WHERE a.status IN ('OPEN','COMPLETED') AND r.marked_at IS NOT NULL AND r.status='ABSENT')::int AS absent,
+        COUNT(r.id) FILTER (WHERE a.status IN ('OPEN','COMPLETED') AND r.marked_at IS NOT NULL AND r.status='LATE')::int AS late,
+        COUNT(r.id) FILTER (WHERE a.status IN ('OPEN','COMPLETED') AND r.marked_at IS NOT NULL AND r.status='LEAVE')::int AS leave,
+        COALESCE(ROUND(100.0*COUNT(r.id) FILTER (WHERE a.status IN ('OPEN','COMPLETED') AND r.marked_at IS NOT NULL AND r.status IN ('PRESENT','LATE')) / NULLIF(COUNT(r.id) FILTER (WHERE a.status IN ('OPEN','COMPLETED') AND r.marked_at IS NOT NULL AND r.status<>'LEAVE'),0),2),0) AS percentage
        FROM attendance_records r
        JOIN students s ON s.id=r.student_id
        LEFT JOIN users u ON u.id=s.user_id

@@ -216,12 +216,44 @@ async function createStudent(req, res) {
 
         console.error("Create student error:", error);
 
+        if (error.code === "23505") {
+            const isAdmissionConflict = error.constraint?.includes("admission_number");
+            return res.status(409).json({
+                success: false,
+                message: isAdmissionConflict ? "Admission number already exists in this institute" : "Email already exists",
+            });
+        }
+
         return res.status(500).json({
             success: false,
             message: "Failed to create student",
         });
     } finally {
         client.release();
+    }
+}
+
+
+async function getNextAdmissionNumber(req, res) {
+    try {
+        const year = new Date().getFullYear();
+        const prefix = `ADM-${year}-`;
+        const result = await pool.query(
+            "SELECT admission_number FROM students WHERE institute_id = $1 AND admission_number LIKE $2",
+            [req.user.instituteId, `${prefix}%`]
+        );
+        const highestNumber = result.rows.reduce((highest, row) => {
+            const suffix = row.admission_number.slice(prefix.length);
+            return /^\d+$/.test(suffix) ? Math.max(highest, Number(suffix)) : highest;
+        }, 0);
+
+        return res.json({
+            success: true,
+            data: { admissionNumber: `${prefix}${String(highestNumber + 1).padStart(4, "0")}` },
+        });
+    } catch (error) {
+        console.error("Generate admission number error:", error);
+        return res.status(500).json({ success: false, message: "Could not generate admission number" });
     }
 }
 
@@ -310,6 +342,7 @@ async function deleteStudent(req, res) {
 
 module.exports = {
     createStudent,
+    getNextAdmissionNumber,
     getStudents,
     updateStudent,
     deleteStudent,

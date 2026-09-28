@@ -16,15 +16,17 @@ async function login(req, res) {
     const result = await pool.query(
       `
       SELECT
-        id,
-        institute_id,
-        name,
-        email,
-        password_hash,
-        role,
-        status
-      FROM users
-      WHERE email = $1
+        u.id,
+        u.institute_id,
+        i.name AS institute_name,
+        u.name,
+        u.email,
+        u.password_hash,
+        u.role,
+        u.status
+      FROM users u
+      LEFT JOIN institutes i ON i.id = u.institute_id
+      WHERE u.email = $1
       `,
       [email],
     );
@@ -79,6 +81,7 @@ async function login(req, res) {
           email: user.email,
           role: user.role,
           instituteId: user.institute_id,
+          instituteName: user.institute_name || null,
         },
       },
     });
