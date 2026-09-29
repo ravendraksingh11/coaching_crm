@@ -239,6 +239,33 @@ async function getStudentTests(req, res) {
       .json({ success: false, message: "Failed to fetch tests" });
   }
 }
+async function getStudentTestResult(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT t.id,t.title,t.total_marks,tr.marks_obtained,tr.percentage,sub.submitted_at,
+         COALESCE(json_agg(json_build_object(
+           'id',q.id,'question',q.question,'option_a',q.option_a,'option_b',q.option_b,
+           'option_c',q.option_c,'option_d',q.option_d,'marks',q.marks,
+           'correct_option',q.correct_option,'selected_option',sub.answers->>q.id::text,
+           'is_correct',(sub.answers->>q.id::text)=q.correct_option,
+           'marks_earned',CASE WHEN (sub.answers->>q.id::text)=q.correct_option THEN q.marks ELSE 0 END
+         ) ORDER BY q.created_at,q.id) FILTER (WHERE q.id IS NOT NULL),'[]'::json) AS questions
+       FROM students s
+       JOIN test_submissions sub ON sub.student_id=s.id AND sub.test_id=$1
+       JOIN tests t ON t.id=sub.test_id AND t.institute_id=s.institute_id
+       JOIN test_results tr ON tr.test_id=t.id AND tr.student_id=s.id
+       LEFT JOIN questions q ON q.test_id=t.id
+       WHERE s.user_id=$2
+       GROUP BY t.id,tr.id,sub.id`,
+      [req.params.id, req.user.userId],
+    );
+    if (!result.rowCount) return res.status(404).json({ success: false, message: "Submitted test result not found" });
+    return res.json({ success: true, data: result.rows[0] });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ success: false, message: "Could not load test result" });
+  }
+}
 async function getTestForStudent(req, res) {
   try {
     const r = await pool.query(
@@ -456,6 +483,7 @@ module.exports = {
   updateInstituteTest,
   deleteInstituteTest,
   getStudentTests,
+  getStudentTestResult,
   getTestForStudent,
   startTest,
   submitTest,

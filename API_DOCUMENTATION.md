@@ -29,8 +29,12 @@ Blocked/expired institutes are rejected by authentication on subsequent protecte
 | GET/POST | `/institute/batches` | List/create: `name`, optional `courseId,startDate,endDate,startTime,endTime,roomNumber` |
 | PUT/DELETE | `/institute/batches/:id` | Edit/delete own batch |
 | GET | `/institute/students` | List students |
-| POST | `/institute/students` | Add student: `name,email,password,admissionNumber`, optional parent/profile fields and `batchId` |
+| POST | `/institute/students` | Add student: `name,email,password,admissionNumber`, optional parent/profile fields and `batchId`; fees: `feePaying` boolean and, when true, `feeFrequency` (`ONE_TIME` or `MONTHLY`) plus `feeAmount`. Monthly plans require a batch with an end date. |
 | PUT/DELETE | `/institute/students/:id` | Edit/delete student |
+| GET | `/fees/summary` | Pending counts, overdue counts, outstanding and received totals by fee frequency |
+| GET | `/fees/pending?frequency=ONE_TIME\|MONTHLY` | Pending student fee items, optionally filtered by frequency |
+| GET | `/fees/students/:studentId` | Fee invoice history for a student |
+| PATCH | `/fees/:feeId/receive` | Record a full or partial receipt: optional `amount,paymentMethod,transactionId,paymentDate`; omit amount to receive the remaining balance |
 | POST | `/tests` | Create and assign a test. Needs `title,totalMarks,questions` (exactly 50), and `batchId` and/or `studentId`; optional `description,durationMinutes,testDate,dueDate`. Each question: `question,optionA,optionB,optionC,optionD,correctOption,marks`. |
 | GET | `/tests/toppers/latest` | Toppers for the latest available test results (maximum 5) |
 | PATCH | `/tests/:id/deactivate` | Close a test and create missed-test notifications |
@@ -54,4 +58,4 @@ Parents must have a `users` record with role `PARENT`, a `parents` record, and a
 
 ## Database setup
 
-For a new database, run `database/schema.sql`. For an existing database, also run [001_test_module.sql](database/migrations/001_test_module.sql) once before using test APIs. Configure `DATABASE_URL`, `JWT_SECRET`, and optionally `FRONTEND_URL`, then start with `npm run dev`.
+For a new database, run `database/schema.sql`. For existing databases, run migrations in order: `001_test_module.sql`, `002_test_controls.sql`, [003_attendance_sessions.sql](database/migrations/003_attendance_sessions.sql), [004_fee_plans.sql](database/migrations/004_fee_plans.sql), and [005_student_fee_submissions.sql](database/migrations/005_student_fee_submissions.sql). Configure `DATABASE_URL`, `JWT_SECRET`, and optionally `FRONTEND_URL`, then start with `npm run dev`.

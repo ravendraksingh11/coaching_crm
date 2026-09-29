@@ -123,4 +123,110 @@ async function getFeeSummary(req, res) {
   }
 }
 
-module.exports = { getPendingFees, getStudentFees, receiveFee, getFeeSummary };
+async function getMyFees(req, res) {
+  try {
+    const student = await pool.query("SELECT id,institute_id FROM students WHERE user_id=$1", [req.user.userId]);
+    if (!student.rowCount) return res.status(404).json({ success: false, message: "Student record not found" });
+    await generateDueMonthlyFees(pool, student.rows[0].institute_id);
+    // Keep fee listing available on installations that have not yet applied
+    // migration 005. Payment submission still requires that migration.
+    const submissionTable = await pool.query(
+      "SELECT to_regclass('student_fee_payment_submissions') IS NOT NULL AS available",
+    );
+    const hasSubmissionsTable = submissionTable.rows[0].available;
+    const balanceExpression = hasSubmissionsTable
+      ? "(f.amount-f.paid_amount-COALESCE((SELECT SUM(r.amount) FROM student_fee_payment_submissions r WHERE r.fee_id=f.id AND r.status='PENDING'),0))"
+      : "(f.amount-f.paid_amount)";
+    const submissionsExpression = hasSubmissionsTable
+      ? "COALESCE((SELECT json_agg(json_build_object('amount',r.amount,'payment_method',r.payment_method,'transaction_id',r.transaction_id,'status',r.status,'created_at',r.created_at) ORDER BY r.created_at DESC) FROM student_fee_payment_submissions r WHERE r.fee_id=f.id AND r.student_id=f.student_id),'[]'::json)"
+      : "'[]'::json";
+    const result = await pool.query(
+      `SELECT f.id,f.title,f.amount,f.paid_amount,
+         ${balanceExpression} AS balance,f.due_date,
+         CASE WHEN f.paid_amount>=f.amount THEN 'PAID' WHEN f.due_date<CURRENT_DATE THEN 'OVERDUE'
+              WHEN f.paid_amount>0 THEN 'PARTIAL' ELSE 'PENDING' END AS status,
+         f.fee_frequency,f.billing_period_start,f.billing_period_end,
+         ${submissionsExpression} AS submissions
+       FROM fees f WHERE f.student_id=$1 ORDER BY f.due_date DESC NULLS LAST,f.created_at DESC`,
+      [student.rows[0].id],
+    );
+    return res.json({ success: true, data: result.rows });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ success: false, message: "Could not load your fees" });
+  }
+}
+
+async function submitMyFeePayment(req, res) {
+  const { amount, paymentMethod = "UPI", transactionId } = req.body;
+  try {
+    const student = await pool.query("SELECT id,institute_id FROM students WHERE user_id=$1", [req.user.userId]);
+    if (!student.rowCount) return res.status(404).json({ success: false, message: "Student record not found" });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const feeResult = await client.query("SELECT * FROM fees WHERE id=$1 AND student_id=$2 FOR UPDATE", [req.params.feeId, student.rows[0].id]);
+      if (!feeResult.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ success: false, message: "Fee record not found" }); }
+      const fee = feeResult.rows[0];
+      const outstanding = await client.query("SELECT COALESCE(SUM(amount),0) AS total FROM student_fee_payment_submissions WHERE fee_id=$1 AND status='PENDING'", [fee.id]);
+      const balance = Number(fee.amount) - Number(fee.paid_amount) - Number(outstanding.rows[0].total);
+      const paymentAmount = Number(amount);
+      if (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || !Number.isInteger(paymentAmount * 100) || paymentAmount > balance) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ success: false, message: `Payment must be greater than zero and no more than ${Math.max(0, balance)}` });
+      }
+      const inserted = await client.query(
+        `INSERT INTO student_fee_payment_submissions (institute_id,fee_id,student_id,student_user_id,amount,payment_method,transaction_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,status`,
+        [student.rows[0].institute_id, fee.id, student.rows[0].id, req.user.userId, paymentAmount, paymentMethod, transactionId || null],
+      );
+      await client.query("COMMIT");
+      return res.status(201).json({ success: true, message: "Payment submitted for institute review", data: inserted.rows[0] });
+    } catch (e) { await client.query("ROLLBACK"); throw e; }
+    finally { client.release(); }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ success: false, message: "Could not submit payment" });
+  }
+}
+
+async function getPendingStudentPayments(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT r.id,r.fee_id,r.amount,r.payment_method,r.transaction_id,r.created_at,
+         s.admission_number,u.name AS student_name,f.title AS fee_title
+       FROM student_fee_payment_submissions r JOIN students s ON s.id=r.student_id
+       JOIN users u ON u.id=s.user_id JOIN fees f ON f.id=r.fee_id
+       WHERE r.institute_id=$1 AND r.status='PENDING' ORDER BY r.created_at`,
+      [req.user.instituteId],
+    );
+    return res.json({ success: true, data: result.rows });
+  } catch (e) { console.error(e); return res.status(500).json({ success: false, message: "Could not fetch submitted payments" }); }
+}
+
+async function approveStudentPayment(req, res) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const submissionResult = await client.query("SELECT * FROM student_fee_payment_submissions WHERE id=$1 AND institute_id=$2 FOR UPDATE", [req.params.submissionId, req.user.instituteId]);
+    if (!submissionResult.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ success: false, message: "Submitted payment not found" }); }
+    const submission = submissionResult.rows[0];
+    if (submission.status !== "PENDING") { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Payment has already been reviewed" }); }
+    const feeResult = await client.query("SELECT * FROM fees WHERE id=$1 FOR UPDATE", [submission.fee_id]);
+    const fee = feeResult.rows[0];
+    if (Number(submission.amount) > Number(fee.amount) - Number(fee.paid_amount)) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Submitted amount is greater than the remaining balance" }); }
+    await client.query(
+      `INSERT INTO payments (institute_id,fee_id,student_id,student_user_id,amount,payment_method,transaction_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [submission.institute_id, submission.fee_id, submission.student_id, submission.student_user_id, submission.amount, submission.payment_method, submission.transaction_id],
+    );
+    const paidAmount = Number((Number(fee.paid_amount) + Number(submission.amount)).toFixed(2));
+    await client.query("UPDATE fees SET paid_amount=$1,status=CASE WHEN $1>=amount THEN 'PAID'::fee_status WHEN due_date<CURRENT_DATE THEN 'OVERDUE'::fee_status ELSE 'PARTIAL'::fee_status END WHERE id=$2", [paidAmount, fee.id]);
+    await client.query("UPDATE student_fee_payment_submissions SET status='APPROVED',reviewed_at=CURRENT_TIMESTAMP,reviewed_by=$1 WHERE id=$2", [req.user.userId, submission.id]);
+    await client.query("COMMIT");
+    return res.json({ success: true, message: "Student payment confirmed" });
+  } catch (e) { await client.query("ROLLBACK"); console.error(e); return res.status(500).json({ success: false, message: "Could not confirm submitted payment" }); }
+  finally { client.release(); }
+}
+
+module.exports = { getPendingFees, getStudentFees, receiveFee, getFeeSummary, getMyFees, submitMyFeePayment, getPendingStudentPayments, approveStudentPayment };

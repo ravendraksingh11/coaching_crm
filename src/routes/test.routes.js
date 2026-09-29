@@ -12,6 +12,7 @@ router.delete("/:id",auth,allowRoles("INSTITUTE_ADMIN"),c.deleteInstituteTest);
 router.get("/toppers/latest",auth,allowRoles("INSTITUTE_ADMIN"),c.latestToppers);
 router.patch("/:id/deactivate",auth,allowRoles("INSTITUTE_ADMIN"),c.deactivateTest);
 router.get("/my",auth,allowRoles("STUDENT"),c.getStudentTests);
+router.get("/:id/result",auth,allowRoles("STUDENT"),c.getStudentTestResult);
 router.post("/:id/start",auth,allowRoles("STUDENT"),c.startTest);
 router.get("/:id",auth,allowRoles("STUDENT"),c.getTestForStudent);
 router.post("/:id/submit",auth,allowRoles("STUDENT"),c.submitTest);
