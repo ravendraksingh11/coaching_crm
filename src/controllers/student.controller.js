@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const pool = require("../../database/connection");
+const { validateFeePlan, createInitialFee } = require("../services/fees.service");
 
 async function createStudent(req, res) {
   const client = await pool.connect();
@@ -25,6 +26,9 @@ async function createStudent(req, res) {
       state,
 
       batchId,
+      feePaying = false,
+      feeFrequency = null,
+      feeAmount = null,
     } = req.body;
 
     if (!instituteId) {
@@ -48,6 +52,11 @@ async function createStudent(req, res) {
     }
 
     await client.query("BEGIN");
+
+    if (typeof feePaying !== "boolean") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ success: false, message: "feePaying must be true or false" });
+    }
 
     // ==========================================
     // Check subscription
@@ -169,11 +178,13 @@ async function createStudent(req, res) {
     // Verify batch
     // ==========================================
 
+    let batchEndDate = null;
+    let batchIsActive = false;
     if (batchId) {
       const batchResult =
         await client.query(
           `
-          SELECT id
+          SELECT id,end_date,(end_date >= CURRENT_DATE) AS end_date_is_active
           FROM batches
           WHERE id = $1
           AND institute_id = $2
@@ -189,6 +200,14 @@ async function createStudent(req, res) {
           message: "Invalid batch",
         });
       }
+      batchEndDate = batchResult.rows[0].end_date;
+      batchIsActive = batchResult.rows[0].end_date_is_active;
+    }
+
+    const feePlanError = validateFeePlan({ feePaying, feeFrequency, feeAmount, batchEndDate, batchIsActive });
+    if (feePlanError) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ success: false, message: feePlanError });
     }
 
     // ==========================================
@@ -258,11 +277,16 @@ async function createStudent(req, res) {
           date_of_birth,
           address,
           city,
-          state
+          state,
+          fee_applicable,
+          fee_frequency,
+          fee_amount,
+          fee_batch_id,
+          fee_start_date
         )
         VALUES
         (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,CASE WHEN $10 THEN CURRENT_DATE ELSE NULL END
         )
         RETURNING *
         `,
@@ -276,6 +300,10 @@ async function createStudent(req, res) {
           address || null,
           city || null,
           state || null,
+          feePaying,
+          feePaying ? feeFrequency : null,
+          feePaying ? Number(feeAmount) : null,
+          feePaying ? (batchId || null) : null,
         ]
       );
 
@@ -311,6 +339,15 @@ async function createStudent(req, res) {
       enrollment =
         enrollmentResult.rows[0];
     }
+
+    await createInitialFee(client, {
+      instituteId,
+      studentId: student.id,
+      feePaying,
+      feeFrequency,
+      feeAmount: feePaying ? Number(feeAmount) : null,
+      feeStartDate: student.fee_start_date,
+    });
 
     await client.query("COMMIT");
 

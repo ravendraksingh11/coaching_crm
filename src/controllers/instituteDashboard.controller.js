@@ -1,4 +1,5 @@
 const pool = require("../../database/connection");
+const { generateDueMonthlyFees } = require("../services/fees.service");
 
 async function getInstituteDashboard(req, res) {
     try {
@@ -11,6 +12,8 @@ async function getInstituteDashboard(req, res) {
             });
         }
 
+        await generateDueMonthlyFees(pool, instituteId);
+
         const [
             students,
             teachers,
@@ -18,6 +21,9 @@ async function getInstituteDashboard(req, res) {
             courses,
             batches,
             pendingFees,
+            feeSummary,
+            oneTimePendingFees,
+            monthlyPendingFees,
             attendance,
             tests,
             subscription,
@@ -59,10 +65,37 @@ async function getInstituteDashboard(req, res) {
 
             pool.query(`
         SELECT
-          COALESCE(SUM(amount), 0)::numeric AS amount
+          COALESCE(SUM(amount-paid_amount), 0)::numeric AS amount
         FROM fees
         WHERE institute_id = $1
-        AND status IN ('PENDING', 'PARTIAL', 'OVERDUE')
+        AND paid_amount < amount
+      `, [instituteId]),
+
+            pool.query(`
+        SELECT fee_frequency,
+          COUNT(*) FILTER (WHERE paid_amount<amount)::int AS pending_count,
+          COALESCE(SUM(amount-paid_amount) FILTER (WHERE paid_amount<amount),0)::numeric AS pending_amount,
+          COALESCE(SUM(paid_amount),0)::numeric AS received_amount,
+          COUNT(*) FILTER (WHERE due_date<CURRENT_DATE AND paid_amount<amount)::int AS overdue_count
+        FROM fees WHERE institute_id=$1 GROUP BY fee_frequency
+      `, [instituteId]),
+
+            pool.query(`
+        SELECT f.id AS fee_id,s.id AS student_id,s.admission_number,u.name AS student_name,
+          b.name AS batch_name,f.amount,f.paid_amount,(f.amount-f.paid_amount) AS balance,f.due_date
+        FROM fees f JOIN students s ON s.id=f.student_id JOIN users u ON u.id=s.user_id
+        LEFT JOIN batches b ON b.id=s.fee_batch_id
+        WHERE f.institute_id=$1 AND f.fee_frequency='ONE_TIME' AND f.paid_amount<f.amount
+        ORDER BY f.due_date ASC NULLS LAST,u.name LIMIT 10
+      `, [instituteId]),
+
+            pool.query(`
+        SELECT f.id AS fee_id,s.id AS student_id,s.admission_number,u.name AS student_name,
+          b.name AS batch_name,f.amount,f.paid_amount,(f.amount-f.paid_amount) AS balance,f.due_date
+        FROM fees f JOIN students s ON s.id=f.student_id JOIN users u ON u.id=s.user_id
+        LEFT JOIN batches b ON b.id=s.fee_batch_id
+        WHERE f.institute_id=$1 AND f.fee_frequency='MONTHLY' AND f.paid_amount<f.amount
+        ORDER BY f.due_date ASC NULLS LAST,u.name LIMIT 10
       `, [instituteId]),
 
             pool.query(`
@@ -147,6 +180,23 @@ async function getInstituteDashboard(req, res) {
                         pendingFees.rows[0].amount
                     ),
                     tests: tests.rows[0].count,
+                },
+
+                fees: {
+                    summary: feeSummary.rows.reduce((acc, row) => {
+                        acc[row.fee_frequency] = {
+                            pendingCount: row.pending_count,
+                            pendingAmount: Number(row.pending_amount),
+                            receivedAmount: Number(row.received_amount),
+                            overdueCount: row.overdue_count,
+                        };
+                        return acc;
+                    }, {
+                        ONE_TIME: { pendingCount: 0, pendingAmount: 0, receivedAmount: 0, overdueCount: 0 },
+                        MONTHLY: { pendingCount: 0, pendingAmount: 0, receivedAmount: 0, overdueCount: 0 },
+                    }),
+                    oneTimePending: oneTimePendingFees.rows,
+                    monthlyPending: monthlyPendingFees.rows,
                 },
 
                 attendance: {

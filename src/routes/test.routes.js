@@ -6,6 +6,7 @@ const router=express.Router();
 router.post("/",auth,allowRoles("INSTITUTE_ADMIN"),c.createTest);
 router.get("/manage",auth,allowRoles("INSTITUTE_ADMIN"),c.listInstituteTests);
 router.get("/manage/:id",auth,allowRoles("INSTITUTE_ADMIN"),c.getInstituteTest);
+router.get("/manage/:id/students",auth,allowRoles("INSTITUTE_ADMIN"),c.listAssignedTestStudents);
 router.put("/:id",auth,allowRoles("INSTITUTE_ADMIN"),c.updateInstituteTest);
 router.delete("/:id",auth,allowRoles("INSTITUTE_ADMIN"),c.deleteInstituteTest);
 router.get("/toppers/latest",auth,allowRoles("INSTITUTE_ADMIN"),c.latestToppers);

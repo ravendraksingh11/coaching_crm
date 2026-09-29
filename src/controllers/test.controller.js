@@ -365,6 +365,51 @@ async function submitTest(req, res) {
     client.release();
   }
 }
+
+async function listAssignedTestStudents(req, res) {
+  try {
+    const test = await pool.query(
+      "SELECT id FROM tests WHERE id=$1 AND institute_id=$2",
+      [req.params.id, req.user.instituteId],
+    );
+    if (!test.rowCount) {
+      return res.status(404).json({ success: false, message: "Test not found" });
+    }
+
+    const result = await pool.query(
+      `WITH assigned_students AS (
+         SELECT a.due_date, s.id AS student_id
+         FROM test_assignments a
+         JOIN students s ON s.id=a.student_id AND s.institute_id=a.institute_id
+         WHERE a.test_id=$1 AND a.institute_id=$2 AND a.status='ACTIVE' AND a.student_id IS NOT NULL
+         UNION ALL
+         SELECT a.due_date, s.id AS student_id
+         FROM test_assignments a
+         JOIN enrollments e ON e.batch_id=a.batch_id AND e.institute_id=a.institute_id AND e.status='ACTIVE'
+         JOIN students s ON s.id=e.student_id AND s.institute_id=a.institute_id
+         WHERE a.test_id=$1 AND a.institute_id=$2 AND a.status='ACTIVE' AND a.batch_id IS NOT NULL
+       ), roster AS (
+         SELECT student_id, MAX(due_date) AS due_date
+         FROM assigned_students
+         GROUP BY student_id
+       )
+       SELECT s.id AS student_id, u.name, s.admission_number, r.due_date,
+         ta.started_at, ta.submitted_at,
+         CASE WHEN ta.id IS NULL THEN 'PENDING' ELSE 'ATTEMPTED' END AS attempt_status
+       FROM roster r
+       JOIN students s ON s.id=r.student_id
+       JOIN users u ON u.id=s.user_id
+       LEFT JOIN test_attempts ta ON ta.test_id=$1 AND ta.student_id=s.id
+       ORDER BY u.name`,
+      [req.params.id, req.user.instituteId],
+    );
+    return res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error("Fetch assigned test students error:", error);
+    return res.status(500).json({ success: false, message: "Could not fetch assigned students" });
+  }
+}
+
 async function latestToppers(req, res) {
   try {
     const r = await pool.query(
@@ -407,6 +452,7 @@ module.exports = {
   createTest,
   listInstituteTests,
   getInstituteTest,
+  listAssignedTestStudents,
   updateInstituteTest,
   deleteInstituteTest,
   getStudentTests,

@@ -76,11 +76,14 @@ const plansRoutes = require("./routes/plans.routes");
 const testRoutes = require("./routes/test.routes");
 const parentRoutes = require("./routes/parent.routes");
 const attendanceRoutes = require("./routes/attendance.routes");
+const feesRoutes = require("./routes/fees.routes");
+const { generateDueMonthlyFeesForAll } = require("./services/fees.service");
 
 app.use("/api/plans", plansRoutes);
 app.use("/api/tests", testRoutes);
 app.use("/api/parent", parentRoutes);
 app.use("/api/attendance", attendanceRoutes);
+app.use("/api/fees", feesRoutes);
 app.use(
   "/api/subscriptions",
   subscriptionsRoutes
@@ -156,4 +159,9 @@ app.listen(PORT, () => {
   console.log(
     `ClassOrbitCRM API running on http://localhost:${PORT}`
   );
+  const runFeeBilling = () => generateDueMonthlyFeesForAll(require("../database/connection"))
+    .catch((error) => console.error("Monthly fee generation failed:", error));
+  runFeeBilling();
+  const feeBillingInterval = setInterval(runFeeBilling, 6 * 60 * 60 * 1000);
+  feeBillingInterval.unref();
 });

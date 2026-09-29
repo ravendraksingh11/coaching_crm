@@ -271,6 +271,9 @@ async function getStudents(req, res) {
         s.mother_name,
         s.date_of_birth,
         s.created_at,
+        s.fee_applicable,
+        s.fee_frequency,
+        s.fee_amount,
 
         u.name,
         u.email,

@@ -193,6 +193,12 @@ CREATE TABLE students (
 
     date_of_birth DATE,
 
+    fee_applicable BOOLEAN NOT NULL DEFAULT FALSE,
+    fee_frequency VARCHAR(20),
+    fee_amount NUMERIC(10,2),
+    fee_batch_id UUID REFERENCES batches(id) ON DELETE SET NULL,
+    fee_start_date DATE,
+
     address TEXT,
     city VARCHAR(100),
     state VARCHAR(100),
@@ -200,7 +206,13 @@ CREATE TABLE students (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    UNIQUE(institute_id, admission_number)
+    UNIQUE(institute_id, admission_number),
+    CHECK (
+      (fee_applicable=FALSE AND fee_frequency IS NULL AND fee_amount IS NULL AND fee_batch_id IS NULL AND fee_start_date IS NULL)
+      OR
+      (fee_applicable=TRUE AND fee_frequency IN ('ONE_TIME','MONTHLY') AND fee_amount>0 AND fee_start_date IS NOT NULL
+        AND (fee_frequency<>'MONTHLY' OR fee_batch_id IS NOT NULL))
+    )
 );
 
 
@@ -329,9 +341,19 @@ CREATE TABLE fees (
     status fee_status
         NOT NULL DEFAULT 'PENDING',
 
+    fee_frequency VARCHAR(20) NOT NULL DEFAULT 'ONE_TIME'
+        CHECK (fee_frequency IN ('ONE_TIME','MONTHLY')),
+    billing_period_start DATE,
+    billing_period_end DATE,
+
     created_at TIMESTAMP
         NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX uq_fees_student_monthly_period
+ON fees(student_id,billing_period_start) WHERE fee_frequency='MONTHLY';
+CREATE INDEX idx_fees_institute_frequency_status
+ON fees(institute_id,fee_frequency,status,due_date);
 
 CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
