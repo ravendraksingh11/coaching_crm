@@ -2,9 +2,17 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const rateLimit = require("./middleware/rateLimit");
 
 const app = express();
 
+// Set TRUST_PROXY to the number of trusted reverse-proxy hops in production.
+// Do not enable trust proxy for an internet-facing server without a trusted proxy.
+if (process.env.TRUST_PROXY && /^\d+$/.test(process.env.TRUST_PROXY)) {
+  app.set("trust proxy", Number(process.env.TRUST_PROXY));
+}
+
+app.disable("x-powered-by");
 app.use(
   cors({
     origin:
@@ -13,7 +21,19 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (req.secure) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  next();
+});
+
+// Broad protection for API endpoints; sensitive endpoints add a stricter limit below.
+app.use("/api", rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
+
+app.use(express.json({ limit: "2mb" }));
 
 
 // ==========================================

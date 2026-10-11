@@ -35,7 +35,7 @@ Blocked/expired institutes are rejected by authentication on subsequent protecte
 | GET | `/fees/pending?frequency=ONE_TIME\|MONTHLY` | Pending student fee items, optionally filtered by frequency |
 | GET | `/fees/students/:studentId` | Fee invoice history for a student |
 | PATCH | `/fees/:feeId/receive` | Record a full or partial receipt: optional `amount,paymentMethod,transactionId,paymentDate`; omit amount to receive the remaining balance |
-| POST | `/tests` | Create and assign a test. Needs `title,totalMarks,questions` (exactly 50), and `batchId` and/or `studentId`; optional `description,durationMinutes,testDate,dueDate`. Each question: `question,optionA,optionB,optionC,optionD,correctOption,marks`. |
+| POST | `/tests` | Create and assign a test. Needs `title,totalMarks,questions` (exactly 50), and `batchId` and/or `studentId`; optional `description,durationMinutes,testDate,dueDate`. Each question: `question` (supports plain text and Markdown, including `![alt](image-url)`), `optionA,optionB,optionC,optionD,correctOption,marks`. |
 | GET | `/tests/toppers/latest` | Toppers for the latest available test results (maximum 5) |
 | PATCH | `/tests/:id/deactivate` | Close a test and create missed-test notifications |
 

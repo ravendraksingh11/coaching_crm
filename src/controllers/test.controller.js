@@ -1,5 +1,10 @@
 const pool = require("../../database/connection");
 
+// Keep question layout markup as text so every client can render the same content safely.
+function normalizeQuestionContent(value) {
+  return typeof value === "string" ? value.replace(/\r\n?/g, "\n") : "";
+}
+
 async function createTest(req, res) {
   const {
     title,
@@ -61,13 +66,13 @@ async function createTest(req, res) {
       ],
     );
     for (const q of questions) {
-      if (!q.question || !q.correctOption)
+      if (!normalizeQuestionContent(q.question).trim() || !q.correctOption)
         throw new Error("Each question and correctOption are required");
       await client.query(
         `INSERT INTO questions (test_id,question,option_a,option_b,option_c,option_d,correct_option,marks) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [
           test.rows[0].id,
-          q.question,
+          normalizeQuestionContent(q.question),
           q.optionA || null,
           q.optionB || null,
           q.optionC || null,
@@ -176,7 +181,7 @@ async function updateInstituteTest(req, res) {
       const valid = await client.query("SELECT 1 FROM students WHERE id=$1 AND institute_id=$2", [studentId, req.user.instituteId]);
       if (!valid.rowCount) throw new Error("Invalid student");
     }
-    for (const q of questions) if (!q.question || !q.correctOption) throw new Error("Each question and correctOption are required");
+    for (const q of questions) if (!normalizeQuestionContent(q.question).trim() || !q.correctOption) throw new Error("Each question and correctOption are required");
     await client.query(
       `UPDATE tests SET title=$1,description=$2,total_marks=$3,duration_minutes=$4,test_date=$5,screen_recording=$6,auto_submit_on_leave=$7 WHERE id=$8 AND institute_id=$9`,
       [title, description || null, totalMarks, durationMinutes, testDate || null, screenRecording === true, autoSubmitOnLeave === true, req.params.id, req.user.instituteId],
@@ -185,7 +190,7 @@ async function updateInstituteTest(req, res) {
     for (const q of questions) {
       await client.query(
         `INSERT INTO questions (test_id,question,option_a,option_b,option_c,option_d,correct_option,marks) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [req.params.id, q.question, q.optionA || q.option_a || null, q.optionB || q.option_b || null, q.optionC || q.option_c || null, q.optionD || q.option_d || null, q.correctOption || q.correct_option, q.marks || 1],
+        [req.params.id, normalizeQuestionContent(q.question), q.optionA || q.option_a || null, q.optionB || q.option_b || null, q.optionC || q.option_c || null, q.optionD || q.option_d || null, q.correctOption || q.correct_option, q.marks || 1],
       );
     }
     await client.query("UPDATE test_assignments SET batch_id=$1,student_id=$2,due_date=$3 WHERE test_id=$4 AND institute_id=$5", [batchId || null, studentId || null, dueDate || null, req.params.id, req.user.instituteId]);
