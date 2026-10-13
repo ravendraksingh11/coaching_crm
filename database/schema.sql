@@ -512,6 +512,8 @@ CREATE TABLE tests (
 
     test_date DATE,
 
+    result_declaration_date DATE,
+
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
         CHECK (status IN ('DRAFT', 'ACTIVE', 'INACTIVE')),
 

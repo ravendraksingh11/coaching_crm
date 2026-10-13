@@ -16,6 +16,7 @@ async function createTest(req, res) {
     batchId,
     studentId,
     dueDate,
+    resultDeclarationDate,
     screenRecording = false,
     autoSubmitOnLeave = false,
   } = req.body;
@@ -52,7 +53,7 @@ async function createTest(req, res) {
     }
     if (!batchId && !studentId) throw new Error("Assign a batch or student");
     const test = await client.query(
-      `INSERT INTO tests (institute_id,title,description,total_marks,duration_minutes,test_date,created_by,screen_recording,auto_submit_on_leave) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      `INSERT INTO tests (institute_id,title,description,total_marks,duration_minutes,test_date,result_declaration_date,created_by,screen_recording,auto_submit_on_leave) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [
         req.user.instituteId,
         title,
@@ -60,6 +61,7 @@ async function createTest(req, res) {
         totalMarks,
         durationMinutes || null,
         testDate || null,
+        resultDeclarationDate || null,
         req.user.userId,
         screenRecording === true,
         autoSubmitOnLeave === true,
@@ -113,7 +115,7 @@ async function createTest(req, res) {
 async function listInstituteTests(req, res) {
   try {
     const result = await pool.query(
-      `SELECT t.id,t.title,t.description,t.total_marks,t.duration_minutes,t.test_date,t.status,t.screen_recording,t.auto_submit_on_leave,t.created_at,
+      `SELECT t.id,t.title,t.description,t.total_marks,t.duration_minutes,t.test_date,t.result_declaration_date,t.status,t.screen_recording,t.auto_submit_on_leave,t.created_at,
         COALESCE(json_agg(DISTINCT jsonb_build_object('batchId',a.batch_id,'studentId',a.student_id,'dueDate',a.due_date)) FILTER (WHERE a.id IS NOT NULL),'[]') AS assignments,
         COUNT(DISTINCT q.id)::int AS question_count,
         COUNT(DISTINCT sub.id)::int AS submission_count,
@@ -156,7 +158,7 @@ async function getInstituteTest(req, res) {
 }
 
 async function updateInstituteTest(req, res) {
-  const { title, description, totalMarks, durationMinutes, testDate, dueDate, questions, batchId, studentId, screenRecording, autoSubmitOnLeave } = req.body;
+  const { title, description, totalMarks, durationMinutes, testDate, dueDate, resultDeclarationDate, questions, batchId, studentId, screenRecording, autoSubmitOnLeave } = req.body;
   if (!title || !Number.isInteger(Number(totalMarks)) || !Number.isInteger(Number(durationMinutes)) || Number(durationMinutes) < 1 || !Array.isArray(questions) || questions.length < 1 || (!batchId && !studentId)) {
     return res.status(400).json({ success: false, message: "Provide a title, positive marks and duration, at least one question, and a batch or student assignment" });
   }
@@ -183,8 +185,8 @@ async function updateInstituteTest(req, res) {
     }
     for (const q of questions) if (!normalizeQuestionContent(q.question).trim() || !q.correctOption) throw new Error("Each question and correctOption are required");
     await client.query(
-      `UPDATE tests SET title=$1,description=$2,total_marks=$3,duration_minutes=$4,test_date=$5,screen_recording=$6,auto_submit_on_leave=$7 WHERE id=$8 AND institute_id=$9`,
-      [title, description || null, totalMarks, durationMinutes, testDate || null, screenRecording === true, autoSubmitOnLeave === true, req.params.id, req.user.instituteId],
+      `UPDATE tests SET title=$1,description=$2,total_marks=$3,duration_minutes=$4,test_date=$5,result_declaration_date=$6,screen_recording=$7,auto_submit_on_leave=$8 WHERE id=$9 AND institute_id=$10`,
+      [title, description || null, totalMarks, durationMinutes, testDate || null, resultDeclarationDate || null, screenRecording === true, autoSubmitOnLeave === true, req.params.id, req.user.instituteId],
     );
     await client.query("DELETE FROM questions WHERE test_id=$1", [req.params.id]);
     for (const q of questions) {
@@ -219,7 +221,10 @@ async function deleteInstituteTest(req, res) {
 async function getStudentTests(req, res) {
   try {
     const r = await pool.query(
-      `SELECT DISTINCT t.id,t.title,t.description,t.total_marks,t.duration_minutes,t.test_date,t.created_at,t.screen_recording,t.auto_submit_on_leave,a.due_date,ts.submitted_at,tr.marks_obtained,tr.percentage
+      `SELECT DISTINCT t.id,t.title,t.description,t.total_marks,t.duration_minutes,t.test_date,t.result_declaration_date,t.created_at,t.screen_recording,t.auto_submit_on_leave,a.due_date,ts.submitted_at,
+         (tr.id IS NOT NULL AND (t.result_declaration_date IS NULL OR t.result_declaration_date <= CURRENT_DATE)) AS result_available,
+         CASE WHEN t.result_declaration_date IS NULL OR t.result_declaration_date <= CURRENT_DATE THEN tr.marks_obtained END AS marks_obtained,
+         CASE WHEN t.result_declaration_date IS NULL OR t.result_declaration_date <= CURRENT_DATE THEN tr.percentage END AS percentage
        FROM students s
        JOIN test_assignments a ON a.status='ACTIVE'
        JOIN tests t ON t.id=a.test_id AND t.status='ACTIVE' AND t.institute_id=s.institute_id AND a.institute_id=s.institute_id
@@ -246,8 +251,30 @@ async function getStudentTests(req, res) {
 }
 async function getStudentTestResult(req, res) {
   try {
+    const availability = await pool.query(
+      `SELECT t.result_declaration_date,
+         (t.result_declaration_date IS NULL OR t.result_declaration_date <= CURRENT_DATE) AS result_available
+       FROM students s
+       JOIN test_submissions sub ON sub.student_id=s.id AND sub.test_id=$1
+       JOIN tests t ON t.id=sub.test_id AND t.institute_id=s.institute_id
+       WHERE s.user_id=$2`,
+      [req.params.id, req.user.userId],
+    );
+    if (!availability.rowCount) {
+      return res.status(404).json({
+        success: false,
+        message: "Submitted test result not found",
+      });
+    }
+    if (!availability.rows[0].result_available) {
+      return res.status(403).json({
+        success: false,
+        message: "The test result has not been declared yet",
+        resultDeclarationDate: availability.rows[0].result_declaration_date,
+      });
+    }
     const result = await pool.query(
-      `SELECT t.id,t.title,t.total_marks,tr.marks_obtained,tr.percentage,sub.submitted_at,
+      `SELECT t.id,t.title,t.total_marks,t.result_declaration_date,tr.marks_obtained,tr.percentage,sub.submitted_at,
          COALESCE(json_agg(json_build_object(
            'id',q.id,'question',q.question,'option_a',q.option_a,'option_b',q.option_b,
            'option_c',q.option_c,'option_d',q.option_d,'marks',q.marks,
@@ -347,7 +374,12 @@ async function submitTest(req, res) {
     );
     if (!student.rowCount) throw new Error("Student not found");
     const attempt = await client.query(
-      `SELECT ta.started_at,ta.submitted_at,t.duration_minutes FROM test_attempts ta JOIN tests t ON t.id=ta.test_id WHERE ta.test_id=$1 AND ta.student_id=$2 FOR UPDATE`,
+      `SELECT ta.started_at,ta.submitted_at,t.duration_minutes,t.result_declaration_date,
+         (t.result_declaration_date IS NULL OR t.result_declaration_date <= CURRENT_DATE) AS result_available
+       FROM test_attempts ta
+       JOIN tests t ON t.id=ta.test_id
+       WHERE ta.test_id=$1 AND ta.student_id=$2
+       FOR UPDATE`,
       [req.params.id, student.rows[0].id],
     );
     if (!attempt.rowCount) throw new Error("Start this test before submitting");
@@ -387,7 +419,17 @@ async function submitTest(req, res) {
       [student.rows[0].institute_id, req.user.userId],
     );
     await client.query("COMMIT");
-    return res.status(201).json({ success: true, data: result.rows[0] });
+    const responseData = attempt.rows[0].result_available
+      ? { ...result.rows[0], result_available: true }
+      : {
+          id: result.rows[0].id,
+          test_id: result.rows[0].test_id,
+          student_id: result.rows[0].student_id,
+          submitted_at: result.rows[0].submitted_at,
+          result_declaration_date: attempt.rows[0].result_declaration_date,
+          result_available: false,
+        };
+    return res.status(201).json({ success: true, data: responseData });
   } catch (e) {
     await client.query("ROLLBACK");
     return res
@@ -426,12 +468,14 @@ async function listAssignedTestStudents(req, res) {
          GROUP BY student_id
        )
        SELECT s.id AS student_id, u.name, s.admission_number, r.due_date,
-         ta.started_at, ta.submitted_at,
+         ta.started_at, ta.submitted_at,tr.marks_obtained,tr.percentage,t.total_marks,
          CASE WHEN ta.id IS NULL THEN 'PENDING' ELSE 'ATTEMPTED' END AS attempt_status
        FROM roster r
        JOIN students s ON s.id=r.student_id
        JOIN users u ON u.id=s.user_id
+       JOIN tests t ON t.id=$1
        LEFT JOIN test_attempts ta ON ta.test_id=$1 AND ta.student_id=s.id
+       LEFT JOIN test_results tr ON tr.test_id=$1 AND tr.student_id=s.id
        ORDER BY u.name`,
       [req.params.id, req.user.instituteId],
     );
