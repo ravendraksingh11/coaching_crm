@@ -249,8 +249,15 @@ async function getBatchReport(req, res) {
            SELECT 1 FROM attendance_sessions own
            WHERE own.batch_id=$1 AND own.institute_id=$2 AND own.teacher_id=$4
          ))
+         AND ($5='' OR u.name ILIKE '%' || $5 || '%')
        GROUP BY s.id,u.name,s.admission_number ORDER BY u.name`,
-      [req.params.batchId, req.user.instituteId, req.user.role, req.user.userId],
+      [
+        req.params.batchId,
+        req.user.instituteId,
+        req.user.role,
+        req.user.userId,
+        String(req.query.name || "").trim(),
+      ],
     );
     return res.json({ success: true, data: result.rows });
   } catch (e) {

@@ -43,7 +43,7 @@ app.use(express.json({ limit: "2mb" }));
 app.get("/api/health", (req, res) => {
   res.json({
     success: true,
-    message: "ClassOrbitCRM API is running",
+    message: "Shikvanta API is running",
   });
 });
 
@@ -54,6 +54,7 @@ app.get("/api/health", (req, res) => {
 
 const authRoutes =
   require("./routes/auth.routes");
+const enquiriesRoutes = require("./routes/enquiries.routes");
 
 const instituteRoutes =
   require("./routes/institute.routes");
@@ -154,6 +155,8 @@ app.use(
   authRoutes
 );
 
+app.use("/api/enquiries", enquiriesRoutes);
+
 app.use(
   "/api/institute/dashboard",
   instituteDashboardRoutes
@@ -177,7 +180,7 @@ const PORT = process.env.PORT || 5010;
 
 app.listen(PORT, () => {
   console.log(
-    `ClassOrbitCRM API running on http://localhost:${PORT}`
+    `Shikvanta API running on http://localhost:${PORT}`
   );
   const runFeeBilling = () => generateDueMonthlyFeesForAll(require("../database/connection"))
     .catch((error) => console.error("Monthly fee generation failed:", error));

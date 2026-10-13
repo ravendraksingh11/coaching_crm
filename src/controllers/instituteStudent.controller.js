@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const pool = require("../../database/connection");
+const { generateDueMonthlyFees } = require("../services/fees.service");
 
 async function createStudent(req, res) {
     const client = await pool.connect();
@@ -321,6 +322,96 @@ async function getStudents(req, res) {
     }
 }
 
+async function getStudentRecord(req, res) {
+    try {
+        const studentResult = await pool.query(
+            `SELECT s.id,s.admission_number,u.name,u.email
+             FROM students s JOIN users u ON u.id=s.user_id
+             WHERE s.id=$1 AND s.institute_id=$2`,
+            [req.params.id, req.user.instituteId]
+        );
+        if (!studentResult.rowCount) {
+            return res.status(404).json({ success: false, message: "Student not found" });
+        }
+
+        const studentId = req.params.id;
+        const instituteId = req.user.instituteId;
+        await generateDueMonthlyFees(pool, instituteId);
+        const [testResult, attendanceResult, submissionTable] = await Promise.all([
+            pool.query(
+                `SELECT t.id AS test_id,t.title,t.total_marks,ta.started_at,
+                    COALESCE(ta.submitted_at,sub.submitted_at) AS submitted_at,
+                    tr.marks_obtained,
+                    COUNT(q.id)::int AS total_questions,
+                    COUNT(q.id) FILTER (
+                      WHERE sub.answers ? q.id::text
+                    )::int AS attempted_questions
+                 FROM test_attempts ta
+                 JOIN tests t ON t.id=ta.test_id AND t.institute_id=$2
+                 LEFT JOIN test_submissions sub
+                   ON sub.test_id=t.id AND sub.student_id=ta.student_id
+                 LEFT JOIN test_results tr
+                   ON tr.test_id=t.id AND tr.student_id=ta.student_id
+                 LEFT JOIN questions q ON q.test_id=t.id
+                 WHERE ta.student_id=$1
+                 GROUP BY t.id,ta.id,sub.id,tr.id
+                 ORDER BY ta.started_at DESC`,
+                [studentId, instituteId]
+            ),
+            pool.query(
+                `SELECT a.id AS session_id,a.session_date,a.start_time,b.name AS batch_name,r.status
+                 FROM attendance_records r
+                 JOIN attendance_sessions a ON a.id=r.attendance_session_id
+                 JOIN batches b ON b.id=a.batch_id
+                 WHERE r.student_id=$1 AND a.institute_id=$2 AND a.status='COMPLETED'
+                 ORDER BY a.session_date DESC,a.start_time DESC NULLS LAST`,
+                [studentId, instituteId]
+            ),
+            pool.query(
+                "SELECT to_regclass('student_fee_payment_submissions') IS NOT NULL AS available"
+            ),
+        ]);
+
+        const hasSubmissionsTable = submissionTable.rows[0].available;
+        const balanceExpression = hasSubmissionsTable
+            ? "(f.amount-f.paid_amount-COALESCE((SELECT SUM(r.amount) FROM student_fee_payment_submissions r WHERE r.fee_id=f.id AND r.status='PENDING'),0))"
+            : "(f.amount-f.paid_amount)";
+        const submissionsExpression = hasSubmissionsTable
+            ? "COALESCE((SELECT json_agg(json_build_object('amount',r.amount,'payment_method',r.payment_method,'transaction_id',r.transaction_id,'status',r.status,'created_at',r.created_at) ORDER BY r.created_at DESC) FROM student_fee_payment_submissions r WHERE r.fee_id=f.id AND r.student_id=f.student_id),'[]'::json)"
+            : "'[]'::json";
+        const feeResult = await pool.query(
+            `SELECT f.id,f.title,f.amount,f.paid_amount,${balanceExpression} AS balance,
+                f.due_date,f.fee_frequency,f.billing_period_start,f.billing_period_end,
+                CASE WHEN f.paid_amount>=f.amount THEN 'PAID'
+                     WHEN f.due_date<CURRENT_DATE THEN 'OVERDUE'
+                     WHEN f.paid_amount>0 THEN 'PARTIAL' ELSE 'PENDING' END AS status,
+                ${submissionsExpression} AS submissions
+             FROM fees f
+             WHERE f.student_id=$1 AND f.institute_id=$2
+             ORDER BY f.due_date DESC NULLS LAST,f.created_at DESC`,
+            [studentId, instituteId]
+        );
+
+        const sessions = attendanceResult.rows;
+        return res.json({
+            success: true,
+            data: {
+                student: studentResult.rows[0],
+                tests: testResult.rows,
+                fees: feeResult.rows,
+                attendance: {
+                    totalSessions: sessions.length,
+                    presentSessions: sessions.filter((session) => session.status === "PRESENT").length,
+                    sessions,
+                },
+            },
+        });
+    } catch (error) {
+        console.error("Get student record error:", error);
+        return res.status(500).json({ success: false, message: "Failed to fetch student record" });
+    }
+}
+
 async function updateStudent(req, res) {
     try {
         const { name, phone, admissionNumber, fatherName, motherName, dateOfBirth, address, city, state } = req.body;
@@ -347,6 +438,7 @@ module.exports = {
     createStudent,
     getNextAdmissionNumber,
     getStudents,
+    getStudentRecord,
     updateStudent,
     deleteStudent,
 };

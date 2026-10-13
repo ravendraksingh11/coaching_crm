@@ -192,6 +192,17 @@ async function submitMyFeePayment(req, res) {
 
 async function getPendingStudentPayments(req, res) {
   try {
+    const submissionTable = await pool.query(
+      "SELECT to_regclass('student_fee_payment_submissions') IS NOT NULL AS available",
+    );
+    if (!submissionTable.rows[0].available) {
+      return res.status(503).json({
+        success: false,
+        message:
+          "Student payment submissions are not configured. Apply database/migrations/005_student_fee_submissions.sql.",
+      });
+    }
+
     const result = await pool.query(
       `SELECT r.id,r.fee_id,r.amount,r.payment_method,r.transaction_id,r.created_at,
          s.admission_number,u.name AS student_name,f.title AS fee_title

@@ -5,6 +5,7 @@ const allowRoles = require("../middleware/roles");
 
 const {
     getStudents,
+    getStudentRecord,
     getNextAdmissionNumber,
     updateStudent,
     deleteStudent,
@@ -20,6 +21,7 @@ router.get(
     allowRoles("INSTITUTE_ADMIN"),
     getStudents
 );
+router.get("/:id/record", auth, allowRoles("INSTITUTE_ADMIN"), getStudentRecord);
 router.put("/:id", auth, allowRoles("INSTITUTE_ADMIN"), updateStudent);
 router.delete("/:id", auth, allowRoles("INSTITUTE_ADMIN"), deleteStudent);
 
