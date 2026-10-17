@@ -15,9 +15,9 @@ if (process.env.TRUST_PROXY && /^\d+$/.test(process.env.TRUST_PROXY)) {
 app.disable("x-powered-by");
 app.use(
   cors({
-    origin:
-      process.env.FRONTEND_URL ||
-      "http://localhost:5173",
+    origin: "https://shikvanta.ravendraksingh11.workers.dev"
+    // process.env.FRONTEND_URL ||
+    // "http://localhost:5173",
   })
 );
 
