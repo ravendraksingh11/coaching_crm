@@ -40,6 +40,16 @@ app.use(express.json({ limit: "2mb" }));
 // HEALTH
 // ==========================================
 
+// A simple root response is useful when opening the API URL directly and for
+// AWS load balancer checks configured to use `/`.
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "Shikvanta API is running",
+    health: "/api/health",
+  });
+});
+
 app.get("/api/health", (req, res) => {
   res.json({
     success: true,
