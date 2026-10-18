@@ -38,8 +38,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Broad protection for API endpoints; sensitive endpoints add a stricter limit below.
-app.use("/api", rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
+// Production routes are mounted at the root (for example, /auth/login and
+// /institute/dashboard), so apply the broad API limit without an /api prefix.
+// Keep health checks available; sensitive endpoints add a stricter limit below.
+const apiRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
+app.use((req, res, next) => {
+  if (req.path === "/" || req.path === "/health") return next();
+  return apiRateLimit(req, res, next);
+});
 
 app.use(express.json({ limit: "2mb" }));
 
@@ -168,13 +174,6 @@ app.use(
   subscriptionRoutes
 );
 
-app.use(
-  "/auth",
-  authRoutes
-);
-
-// Keep the auth endpoint available at the legacy/root path used by the
-// production frontend as well as under the documented /api prefix.
 app.use("/auth", authRoutes);
 
 app.use("/enquiries", enquiriesRoutes);
