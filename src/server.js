@@ -23,8 +23,8 @@ app.disable("x-powered-by");
 
 app.use(cors({
   origin: [
-    "https://shikvanta.com",
-    "https://www.shikvanta.com",
+    "http://institexa.in/",
+    "https://www.institexa.in",
   ],
   credentials: true,
 }));
