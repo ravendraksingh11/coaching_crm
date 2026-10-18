@@ -173,6 +173,10 @@ app.use(
   authRoutes
 );
 
+// Keep the auth endpoint available at the legacy/root path used by the
+// production frontend as well as under the documented /api prefix.
+app.use("/auth", authRoutes);
+
 app.use("/api/enquiries", enquiriesRoutes);
 
 app.use(
