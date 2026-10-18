@@ -54,11 +54,11 @@ app.get("/", (req, res) => {
   res.json({
     success: true,
     message: "Shikvanta API is running",
-    health: "/api/health",
+    health: "/health",
   });
 });
 
-app.get("/api/health", (req, res) => {
+app.get("/health", (req, res) => {
   res.json({
     success: true,
     message: "Shikvanta API is running",
@@ -118,58 +118,58 @@ const attendanceRoutes = require("./routes/attendance.routes");
 const feesRoutes = require("./routes/fees.routes");
 const { generateDueMonthlyFeesForAll } = require("./services/fees.service");
 
-app.use("/api/plans", plansRoutes);
-app.use("/api/tests", testRoutes);
-app.use("/api/parent", parentRoutes);
-app.use("/api/attendance", attendanceRoutes);
-app.use("/api/fees", feesRoutes);
+app.use("/plans", plansRoutes);
+app.use("/tests", testRoutes);
+app.use("/parent", parentRoutes);
+app.use("/attendance", attendanceRoutes);
+app.use("/fees", feesRoutes);
 app.use(
-  "/api/subscriptions",
+  "/subscriptions",
   subscriptionsRoutes
 );
 
 app.use(
-  "/api/institute/courses",
+  "/institute/courses",
   courseRoutes
 );
 
 app.use(
-  "/api/institute/students",
+  "/institute/students",
   instituteStudentRoutes
 );
 
 app.use(
-  "/api/super-admin",
+  "/super-admin",
   superAdminRoutes
 );
 
 app.use(
-  "/api/super-admin/institutes",
+  "/super-admin/institutes",
   instituteRoutes
 );
 
 app.use(
-  "/api/institute/batches",
+  "/institute/batches",
   batchRoutes
 );
 
 app.use(
-  "/api/institute/students",
+  "/institute/students",
   studentRoutes
 );
 
 app.use(
-  "/api/subscription-plans",
+  "/subscription-plans",
   subscriptionPlanRoutes
 );
 
 app.use(
-  "/api/subscriptions",
+  "/subscriptions",
   subscriptionRoutes
 );
 
 app.use(
-  "/api/auth",
+  "/auth",
   authRoutes
 );
 
@@ -177,20 +177,20 @@ app.use(
 // production frontend as well as under the documented /api prefix.
 app.use("/auth", authRoutes);
 
-app.use("/api/enquiries", enquiriesRoutes);
+app.use("/enquiries", enquiriesRoutes);
 
 app.use(
-  "/api/institute/dashboard",
+  "/institute/dashboard",
   instituteDashboardRoutes
 );
 
 app.use(
-  "/api/institute/settings",
+  "/institute/settings",
   instituteSettingsRoutes
 );
 
 app.use(
-  "/api/institute/teachers",
+  "/institute/teachers",
   teacherRoutes
 );
 
