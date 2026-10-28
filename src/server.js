@@ -24,6 +24,7 @@ app.disable("x-powered-by");
 app.use(cors({
   origin: [
     "http://institexa.in/",
+    "https://institexa.in/",
     "https://www.institexa.in",
   ],
   credentials: true,
