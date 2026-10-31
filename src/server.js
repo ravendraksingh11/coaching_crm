@@ -21,14 +21,40 @@ app.disable("x-powered-by");
 //   })
 // );
 
-app.use(cors({
-  origin: [
-    "http://institexa.in/",
-    "https://institexa.in/",
-    "https://www.institexa.in",
-  ],
-  credentials: true,
-}));
+// app.use(cors({
+//   origin: [
+//     "http://institexa.in/",
+//     "https://institexa.in/",
+//     "https://www.institexa.in",
+//   ],
+//   credentials: true,
+// }));
+
+const allowedOrigins = [
+  "http://institexa.in",
+  "https://institexa.in",
+  "https://www.institexa.in",
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests without Origin (curl, Postman, server-to-server)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
